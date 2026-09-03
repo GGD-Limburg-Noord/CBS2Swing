@@ -1,0 +1,11 @@
+.Renviron
+.Rhistory
+.RData
+.Rproj.user
+.Ruserdata
+.positai
+*.rds
+data/intern
+docs/
+output/
+troubleshooting.R

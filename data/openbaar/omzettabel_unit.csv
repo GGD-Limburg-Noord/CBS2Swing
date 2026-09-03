@@ -1,0 +1,15 @@
+﻿unit_CBS;unit_Swing;data_type_Swing
+%;p;Percentage (sum)
+aantal;aantal;Numeric
+aantal personen;aantal;Numeric
+x 1 000;_1000inw;Mean
+% van het aantal inwoners vanaf 15 jaar;p;Percentage (sum)
+per km²;_km2;Mean
+x 1 000 euro;1000euro;Mean
+per 1 000 inwoners;;
+aantal inwoners per km²;;
+kWh;;
+m³;;
+per huishouden;;
+km;;
+ha;;
