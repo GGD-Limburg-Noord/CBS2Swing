@@ -2,9 +2,9 @@
 # Dit script vormt CBS-data om naar een bestand wat herkend wordt bij import in Swing. 
 # De configuratie gaat middels een Excelsheet, zie bijgevoegde documentatie.
 # Problemen en verzoeken kunnen worden ingediend op
-# https://github.com/ggdatascience/...
+# https://github.com/GGD-Limburg-Noord/CBS2Swing
 #
-# Versie: 2 september 2026
+# Versie: 8 september 2026
 #
 
 
@@ -61,6 +61,15 @@ check_onderwerp_leeg("Swing_indicator_code ontbreekt voor alle indicatoren van d
 CBS_tabellen <- CBS_tabellen %>%
   filter(Onderwerp %in% unique(indicatoren$Onderwerp))
 
+kruisingen_check <- kruisingen %>%
+  mutate(aantal_ingevuld = (!is.na(dimcat_bewaren)) + (!is.na(dimcat_CategoryGroupID_bewaren)))
+
+if (any(kruisingen_check$aantal_ingevuld != 1)) {
+  fout_rijen <- kruisingen_check %>% filter(aantal_ingevuld != 1)
+  stop("Vul voor elke rij in Kruisingen precies één van dimcat_bewaren of dimcat_CategoryGroupID_bewaren in. Foutieve rijen: ",
+       paste(fout_rijen$Swing_indicator_code, fout_rijen$dimcat_kolomnaam, sep = "/", collapse = ", "))
+}
+
 
 # Inladen bestand gemeentecodes en niveau voor Swing
 
@@ -113,10 +122,14 @@ get_gemeentes_GGD <- function(
   provincienaam_key   <- get_topic_key(metadata_gebieden_CBS, "Provincies", "Naam")
   provinciecode_key   <- get_topic_key(metadata_gebieden_CBS, "Provincies", "Code")
   
+  # cbsodataR heeft zelf de GeoDimension-kolom nodig om zijn interne post-processing
+  # uit te kunnen voeren, ook al gebruiken wij die kolom hier verder niet inhoudelijk
+  geodimension_key <- metadata_gebieden_CBS$DataProperties$Key[metadata_gebieden_CBS$DataProperties$Type == "GeoDimension"]
+  
   data <- cbs_get_data(
     catalog = "CBS",
     id = tabelcode,
-    select = c(gemeentenaam_key, gemeentecode_key, ggd_key, provincienaam_key, provinciecode_key)
+    select = unique(c(gemeentenaam_key, gemeentecode_key, ggd_key, provincienaam_key, provinciecode_key, geodimension_key))
   ) %>%
     mutate(across(where(is.character), str_trim)) %>%
     filter(.data[[ggd_key]] == GGD_naam)
@@ -200,20 +213,51 @@ CBS_to_Swing_periodcodes <- function(CBS_periode) {
   )
 }
 
+# Functie om een CategoryGroupID te vertalen naar de losse dimensie-codes eronder
+resolve_dimcat_codes <- function(kolomnaam, dimcode_bewaren, dimgroep_bewaren) {
+  if (!is.na(dimcode_bewaren)) {
+    return(dimcode_bewaren)
+  }
+  
+  metadata_onderwerp_CBS[[kolomnaam]] %>%
+    filter(as.character(CategoryGroupID) == dimgroep_bewaren) %>%
+    pull(Key)
+}
+
 # Functie om ongevraagde dimensie-categorieen uit het databestand te filteren
 build_var_table <- function(i) {
   code <- indicator_subset$Swing_indicator_code[i]
   filters_i <- kruisingen %>% filter(Swing_indicator_code == code)
   
-  reduce(
+  enkelvoudig  <- filters_i %>% filter(!is.na(dimcat_bewaren))
+  gegroepeerd  <- filters_i %>% filter(!is.na(dimcat_CategoryGroupID_bewaren))
+  
+  gefilterd <- reduce(
     seq_len(nrow(filters_i)),
-    function(data, j) filter(data, .data[[filters_i$dimcat_kolomnaam[j]]] %in% filters_i$dimcat_bewaren[j]),
+    function(data, j) {
+      codes <- resolve_dimcat_codes(
+        filters_i$dimcat_kolomnaam[j],
+        filters_i$dimcat_bewaren[j],
+        filters_i$dimcat_CategoryGroupID_bewaren[j]
+      )
+      filter(data, .data[[filters_i$dimcat_kolomnaam[j]]] %in% codes)
+    },
     .init = onderwerp_GGD
-  ) %>%
-    transmute(
-      Perioden, BESCHRIJVING, geoitemcode, geolevelcode,
-      variablecode = code,
-      values = .data[[indicator_subset$CBS_indicatornaam[i]]]
+  )
+  
+  plak_of_NA <- function(x) {
+    if (length(x) == 0) NA_character_ else paste(x, collapse = "; ")
+  }
+  
+  gefilterd %>%
+    group_by(Perioden, BESCHRIJVING, geoitemcode, geolevelcode) %>%
+    summarize(values = sum(.data[[indicator_subset$CBS_indicatornaam[i]]]), .groups = "drop") %>%
+    mutate(
+      variablecode                   = code,
+      dimcat_kolomnaam                = plak_of_NA(enkelvoudig$dimcat_kolomnaam),
+      dimcat_bewaren                  = plak_of_NA(enkelvoudig$dimcat_bewaren),
+      dimcat_kolomnaam_CategoryGroup  = plak_of_NA(gegroepeerd$dimcat_kolomnaam),
+      CategoryGroupID_bewaren         = plak_of_NA(gegroepeerd$dimcat_CategoryGroupID_bewaren)
     )
 }
 
@@ -229,9 +273,29 @@ for (CBS_tabel in 1:nrow(CBS_tabellen)){
   
   # Metadata downloaden vanaf CBS
   metadata_onderwerp_CBS <- cbs_get_meta(catalog = "CBS", 
-                               id = CBS_tabellen$Tabelcode[CBS_tabel])
+                                         id = CBS_tabellen$Tabelcode[CBS_tabel])
   
+  # Check of er van alle beschikbare dimensies een categorie is geselecteerd
+  alle_dimensies <- metadata_onderwerp_CBS$DataProperties %>%
+    filter(Type == "Dimension") %>%
+    pull(Key)
   
+  ontbrekende_dims <- indicator_subset %>%
+    distinct(Swing_indicator_code) %>%
+    rowwise() %>%
+    mutate(dims_ontbreken = list(setdiff(
+      alle_dimensies,
+      kruisingen$dimcat_kolomnaam[kruisingen$Swing_indicator_code == Swing_indicator_code]
+    ))) %>%
+    ungroup() %>%
+    filter(lengths(dims_ontbreken) > 0)
+  
+  if (nrow(ontbrekende_dims) > 0) {
+    stop("Voor de volgende indicator(en) ontbreekt in het tabblad Kruisingen van het input bestand minstens één dimcat_kolomnaam: ",
+         paste0(ontbrekende_dims$Swing_indicator_code, " (mist: ",
+                map_chr(ontbrekende_dims$dims_ontbreken, paste, collapse = ", "), ")",
+                collapse = "; "))
+  }
   # De gewenste periodes definieren
   heeft_perioden <- !is.null(metadata_onderwerp_CBS$Perioden)
   
@@ -249,9 +313,9 @@ for (CBS_tabel in 1:nrow(CBS_tabellen)){
       }
     }) %>% unlist()
     
-    } else {
+  } else {
     perioden <- extract_snapshot_periodcode(metadata_onderwerp_CBS$TableInfos$Period)
-    }
+  }
   
   jaren_nodig <- unique(as.numeric(str_extract(perioden, "\\d{4}")))
   
@@ -259,9 +323,10 @@ for (CBS_tabel in 1:nrow(CBS_tabellen)){
     bind_rows()
   
   # Geografisch niveau definieren
-  geo_col <- str_extract(metadata_onderwerp_CBS$DataProperties$Key, "RegioS|WijkenEnBuurten") %>% 
-    .[!is.na(.)]
-
+  geo_col <- metadata_onderwerp_CBS$DataProperties %>%
+    filter(Type %in% c("GeoDetail", "GeoDimension"), 
+           Key %in% c("RegioS", "WijkenEnBuurten")) %>%
+    pull(Key)
   
   # Server-side filter opbouwen om alleen de benodigde regiocodes op te kunnen vragen (kan alleen bij RegioS, dit scheelt tijd)
   if (length(geo_col) == 1 && geo_col == "RegioS") {
@@ -275,7 +340,7 @@ for (CBS_tabel in 1:nrow(CBS_tabellen)){
     filter_arg <- list()
   }
   
-
+  
   select_geo <- if (length(geo_col) == 1 && geo_col == "WijkenEnBuurten") {
     "WijkenEnBuurten"
   } else if (length(geo_col) == 1) {
@@ -295,8 +360,10 @@ for (CBS_tabel in 1:nrow(CBS_tabellen)){
     if (heeft_perioden) list(Perioden = perioden),
     filter_arg
   )) %>%
-    cbs_add_label_columns() 
-
+    cbs_add_label_columns() %>%
+    mutate(across(where(is.character), str_trim))
+  
+  
   # Periode toevoegen (uit metadata als er geen periode-kolom in data staat)
   onderwerp <- onderwerp %>%
     { if (!heeft_perioden) mutate(., Perioden = perioden) else . } %>%
@@ -305,15 +372,15 @@ for (CBS_tabel in 1:nrow(CBS_tabellen)){
   
   # Toevoegen selectie wijken en geoitemcode/geolevelcode
   if (length(geo_col) == 1 && geo_col == "RegioS") {
-   
-     onderwerp_GGD <- onderwerp %>%
+    
+    onderwerp_GGD <- onderwerp %>%
       mutate(!!geo_col := str_trim(.data[[geo_col]])) %>%
       inner_join(gemeentes_GGD_jaren,
                  by = c("jaar", setNames("geoitemcode_long", geo_col))) %>%
       select(-jaar)
     
   } else if (length(geo_col) == 1 && geo_col == "WijkenEnBuurten") {
-
+    
     gemeentecodes_GGD <- gemeentes_GGD_jaren %>% 
       filter(geolevelcode == "gemeente") %>% 
       pull(geoitemcode)
@@ -347,7 +414,7 @@ for (CBS_tabel in 1:nrow(CBS_tabellen)){
       select(-jaar)
   }
   
-
+  
   # Swing-gebiedscodes toevoegen en Weggooien de kolommen die we niet hoeven
   swingdata <- map(1:nrow(indicator_subset), build_var_table) %>% 
     bind_rows() %>% 
@@ -355,7 +422,7 @@ for (CBS_tabel in 1:nrow(CBS_tabellen)){
     select(-Perioden) %>%
     arrange(variablecode, periodcode)
   
-  swingdata[is.na(swingdata)] <- CBS_tabellen$Lege_cellen[CBS_tabel]
+  swingdata$values[is.na(swingdata$values)] <- CBS_tabellen$Lege_cellen[CBS_tabel]
   
   data_list[[CBS_tabel]] = swingdata
   
@@ -397,19 +464,20 @@ for (CBS_tabel in 1:nrow(CBS_tabellen)){
     rename('data type' = data_type_Swing) %>%
     left_join(roundoff, by = c("indicator code" = "variablecode"))
   
-
+  
   metadata_list[[CBS_tabel]] = metaonderwerp
   
   
   # Verwijderen tussen-dataframes
   rm(gemeentes_GGD_jaren, indicator_subset, jaren_nodig, metadata_onderwerp_CBS, metaonderwerp, onderwerp,
      onderwerp_GGD, roundoff, swingdata, geo_col, heeft_perioden, perioden, select_geo)
-
+  
 }
 
-
 # Data/metadata lijsten aan elkaar verbinden tot een dataframe
-data = bind_rows(data_list)
+#data_troubleshooting = bind_rows(data_list)
+data = bind_rows(data_list) %>%
+  select(-dimcat_kolomnaam, -dimcat_bewaren, -dimcat_kolomnaam_CategoryGroup, -CategoryGroupID_bewaren)
 metadata = bind_rows(metadata_list) %>%
   mutate(formula = NA)
 
