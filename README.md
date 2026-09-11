@@ -68,7 +68,7 @@ Hier geef je aan welke indicatoren (variabelen) je uit elke CBS-tabel wilt, en h
 | **CBS_indicatornaam** | De naam van de indicator zoals CBS die gebruikt. |
 | **CBS_omschrijving_kort** | Optioneel: eigen (korte) aantekening over wat de indicator inhoudt. Wordt niet gebruikt door het script. |
 | **CBS_omschrijving_lang** | Optioneel: eigen (lange) aantekening over wat de indicator inhoudt. Wordt niet gebruikt door het script. |
-| **override_provisional_period** | Optioneel. Normaal bepaalt het script zelf vanaf welke periode de cijfers "voorlopig" zijn (op basis van de CBS-metadata). Wijkt dit voor één indicator af (te vinden in de tabelinformatie op StatLine)? Vul dan hier de juiste periode in, in hetzelfde format als CBS gebruikt (bijv. `2025JJ00`). Vanaf deze periode wordt alles automatisch als voorlopig gemarkeerd in Swing. Spaties voor en na de periode worden genegeerd. |
+| **override_provisional_period** | Normaal bepaalt het script zelf vanaf welke periode de cijfers "voorlopig" zijn (op basis van de CBS-metadata). Wijkt dit voor één indicator af (te vinden in de tabelinformatie op StatLine)? Vul dan hier de juiste periode in, in hetzelfde format als CBS gebruikt (bijv. `2025JJ00`). Vanaf deze periode wordt alles automatisch als voorlopig gemarkeerd in Swing. Spaties voor en na de periode worden genegeerd. |
 | **indicator_includeren** | Kies uit de dropdown opties 'ja' of 'nee' om de indicator mee te nemen in de analyse. |
 | **Swing_indicator_code** | Een unieke, zelfgekozen naam voor deze indicator in Swing (het veld "indicator code" in Swing Studio). Koppelsleutel -> Moet exact overeenkomen met Swing_indicator_code in tabblad Kruisingen, als deze indicator daar voorkomt. |
 | **Swing_name** | Een zelfgekozen korte beschrijving voor Swing (het veld "name" in Swing Studio). Wordt onder andere gebruikt voor titels van grafieken. Maximaal 100 tekens, inclusief spaties. |
@@ -79,9 +79,9 @@ Hier geef je aan welke indicatoren (variabelen) je uit elke CBS-tabel wilt, en h
 
 Hier geef je aan welke dimensies (kruisingen) van de variabelen je wilt selecteren, per indicator.
 
-Heeft de CBS tabel geen dimensies? Dan hoeft deze indicator helemaal niet in dit tabblad te staan. 
+Heeft de CBS-tabel geen dimensies? Dan hoeft deze indicator helemaal niet in dit tabblad te staan. 
 
-Heeft de CBS tabel meerdere dimensies (bijvoorbeeld zowel Geslacht als Leeftijd)? Voeg dan je selectie van alle dimensies voor deze indicator in meerdere rijen toe: één rij per dimensie, allemaal met dezelfde Swing_indicator_code maar een eigen dimcat_kolomnaam en dimcat_bewaren.
+Heeft de CBS-tabel meerdere dimensies (bijvoorbeeld zowel Geslacht als Leeftijd)? Voeg dan je selectie van alle dimensies voor deze indicator in meerdere rijen toe: één rij per dimensie, allemaal met dezelfde Swing_indicator_code maar een eigen dimcat_kolomnaam en dimcat_bewaren.
 
 **Let op**: Als je niet voor alle dimensies van de tabel een selectie maakt, worden van de overgebleven dimensies alle categorieën meegenomen in de analyse, zonder dat ze herkenbaar zijn aan een unieke naam of beschrijving. Zorg er dus voor dat je voor elke dimensie die de CBS-tabel heeft, ook een rij toevoegt.
 
@@ -89,7 +89,8 @@ Heeft de CBS tabel meerdere dimensies (bijvoorbeeld zowel Geslacht als Leeftijd)
 | :--- | :--- |
 | **Swing_indicator_code** | Moet exact overeenkomen met de Swing_indicator_code van de bijbehorende indicator in tabblad Indicatoren. Koppelsleutel. |
 | **dimcat_kolomnaam** | De CBS-naam van de dimensie waarop je wilt filteren, bijvoorbeeld `Geslacht`. |
-| **dimcat_bewaren** | De CBS-code van de dimensie categorie die je uit de dimensie wilt behouden, bijvoorbeeld `T001038` voor zowel mannen als vrouwen. |
+| **dimcat_bewaren** | De CBS-code van de dimensie categorie die je uit de dimensie wilt behouden, bijvoorbeeld `T001038` voor zowel mannen als vrouwen. Het is ook mogelijk om meerdere dimensie categorieën te selecteren en samen te voegen tot één categorie. Zet de codes dan in één cel, gescheiden door een komma (spaties worden genegeerd). Let op: De waarden van deze dimensie categorieën worden dan bij elkaar opgeteld. Gebruik dit dus alleen bij indicatoren die absolute aantallen bevatten. Bij percentages of gemiddelden levert optellen een onjuiste uitkomst op. |
+| **dimcat_CategoryGroupID_bewaren** | De CBS-code van de overkoepelende CategoryGroup. In sommige CBS-tabellen zijn dimensie categorieën gegroepeerd in een overkoepelende CategoryGroup.
 | **dimcat_omschrijving** | Optioneel: eigen aantekening over wat de gekozen dimensie categorie inhoudt. |
 
 
@@ -116,4 +117,3 @@ Loop je tegen een probleem aan? Maak dan een Issue aan op deze GitHub-pagina (hi
 ### Disclaimer
 
 De maker van dit script is niet verantwoordelijk voor eventuele fouten in de data door gebruik van dit script.
-"CBS2Swing" 

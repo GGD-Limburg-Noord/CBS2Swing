@@ -4,7 +4,7 @@
 # Problemen en verzoeken kunnen worden ingediend op
 # https://github.com/GGD-Limburg-Noord/CBS2Swing
 #
-# Versie: 8 september 2026
+# Versie: 11 september 2026
 #
 
 
@@ -216,7 +216,7 @@ CBS_to_Swing_periodcodes <- function(CBS_periode) {
 # Functie om een CategoryGroupID te vertalen naar de losse dimensie-codes eronder
 resolve_dimcat_codes <- function(kolomnaam, dimcode_bewaren, dimgroep_bewaren) {
   if (!is.na(dimcode_bewaren)) {
-    return(dimcode_bewaren)
+    return(str_trim(str_split_1(dimcode_bewaren, ",")))
   }
   
   metadata_onderwerp_CBS[[kolomnaam]] %>%
