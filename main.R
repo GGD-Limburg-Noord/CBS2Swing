@@ -554,7 +554,8 @@ metadata <-  omzettabel_unit %>%
          'provisional period' = NA_character_) %>%           # ontwikkelpunt: provisional period uit Indicatoren sheet halen
   select('indicator code', name, description, unit, 'provisional period', 'data type', roundoff, formula, bron) %>%
   bind_rows(metadata) %>%
-  rename(source           = bron)
+  rename(source           = bron) %>%
+  mutate(visible = 1)
 
 
 rm(CBS_tabellen, data_list, formula, indicatoren, metadata_list, omzettabel_unit, CBS_tabel, GGD, 
