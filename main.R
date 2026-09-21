@@ -30,8 +30,10 @@ data_list = list()
 
 # Inladen configuratie
 CBS_tabellen <- read.xlsx('data/openbaar/input.xlsx', sheet = 'Downloaden')
+CBS_tabellen_alle <- CBS_tabellen                    # ongefilterde versie, nodig om ook de bron te bepalen van onderwerpen die volledig uit indicator_includeren = "nee" bestaan
 indicatoren <- readxl::read_excel('data/openbaar/input.xlsx', sheet = 'Indicatoren', col_types = "text") %>% 
   filter(!is.na(CBS_indicatornaam))
+indicatoren_alle <- indicatoren                      # ongefilterde versie (incl. indicator_includeren = "nee"), nodig voor automatische 'bron'-bepaling van formule-indicatoren
 kruisingen <- readxl::read_excel('data/openbaar/input.xlsx', sheet = 'Kruisingen', col_types = "text") %>%
   mutate(across(everything(), str_trim))
 
@@ -452,7 +454,7 @@ for (CBS_tabel in 1:nrow(CBS_tabellen)){
       'name' = Swing_name,
       'description' = Swing_description,
       'unit' = Unit,
-      'bron' = CBS_tabellen$Catalog[CBS_tabel],
+      'bron' = str_remove(metadata_onderwerp_CBS$TableInfos$Source[1], "\\.$"),
       'provisional period' = if_else(
         !is.na(override_provisional_period),
         str_trim(override_provisional_period),
@@ -490,6 +492,54 @@ metadata = bind_rows(metadata_list) %>%
 formula <- readxl::read_excel('data/openbaar/input.xlsx', sheet = 'Formula') %>%
   mutate(across(everything(), str_trim))
 
+# Bron van formule-indicatoren automatisch afleiden uit de bron(nen) van de indicatoren waaruit de formule is opgebouwd. 
+# De bron van elke basisindicator is de "Source" uit de CBS-tabelmetadata (TableInfos), opgehaald per onderwerp vanuit de ongefilterde Downloaden-tabel.
+bron_per_onderwerp <- CBS_tabellen_alle %>%
+  rowwise() %>%
+  mutate(bron = str_remove(cbs_get_meta(catalog = "CBS", id = Tabelcode)$TableInfos$Source[1], "\\.$")) %>%
+  ungroup() %>%
+  select(Onderwerp, bron)
+
+bron_lookup_CBS <- indicatoren_alle %>%
+  filter(!is.na(Swing_indicator_code)) %>%
+  distinct(Swing_indicator_code, Onderwerp) %>%
+  left_join(bron_per_onderwerp, by = "Onderwerp") %>%
+  {setNames(.$bron, .$Swing_indicator_code)}
+
+formule_lookup  <- setNames(formula$formula, formula$Swing_indicator_code)
+
+bepaal_bron_formula <- function(code, in_behandeling = character()) {
+  
+  if (code %in% names(bron_lookup_CBS)) {
+    return(bron_lookup_CBS[[code]])
+  }
+  
+  if (!code %in% names(formule_lookup)) {
+    return(NA_character_)                            # onbekende term (geen indicator, bijv. een functienaam)
+  }
+  
+  if (code %in% in_behandeling) {
+    stop("Circulaire verwijzing gevonden in tabblad Formula bij indicator: ", code)
+  }
+  
+  genoemde_indicatoren <- str_extract_all(formule_lookup[[code]], "[A-Za-z_][A-Za-z0-9_]*")[[1]]
+  bronnen <- map_chr(genoemde_indicatoren, bepaal_bron_formula, in_behandeling = c(in_behandeling, code))
+  
+  if (length(bronnen) > 0 && all(!is.na(bronnen)) && length(unique(bronnen)) == 1) {
+    unique(bronnen)
+  } else {
+    NA_character_
+  }
+}
+
+formula <- formula %>%
+  mutate(bron = map_chr(Swing_indicator_code, bepaal_bron_formula))
+
+if (any(is.na(formula$bron))) {
+  message("Let op: voor de volgende formule-indicatoren kon de bron niet automatisch (eenduidig) worden bepaald: ",
+          paste(formula$Swing_indicator_code[is.na(formula$bron)], collapse = ", "))
+}
+
 metadata <-  omzettabel_unit %>% 
   select(-unit_CBS) %>%
   filter(unit_Swing != "") %>%
@@ -502,12 +552,14 @@ metadata <-  omzettabel_unit %>%
          description      = Swing_description) %>%
   mutate(roundoff = as.double(roundoff),
          'provisional period' = NA_character_) %>%           # ontwikkelpunt: provisional period uit Indicatoren sheet halen
-  select('indicator code', name, description, unit, 'provisional period', 'data type', roundoff, formula) %>%
-  bind_rows(metadata)
+  select('indicator code', name, description, unit, 'provisional period', 'data type', roundoff, formula, bron) %>%
+  bind_rows(metadata) %>%
+  rename(source           = bron)
 
 
 rm(CBS_tabellen, data_list, formula, indicatoren, metadata_list, omzettabel_unit, CBS_tabel, GGD, 
-   build_var_table, CBS_to_Swing_periodcodes)
+   build_var_table, CBS_to_Swing_periodcodes, bron_lookup_CBS, formule_lookup, bepaal_bron_formula,
+   CBS_tabellen_alle, indicatoren_alle, bron_per_onderwerp)
 
 
 # Opslaan outputbestanden
