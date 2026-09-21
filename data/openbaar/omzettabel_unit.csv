@@ -2,16 +2,17 @@
 %;p;Percentage (sum)
 aantal;aantal;Numeric
 aantal personen;aantal;Numeric
-x 1 000;_1000inw;Mean
+x 1 000;_1000inw;Numeric
 % van het aantal inwoners vanaf 15 jaar;p;Percentage (sum)
 per km²;_km2;Mean
 x 1 000 euro;1000euro;Mean
+1 000 euro;1000euro;Mean
 per 1 000 inwoners;aantal;Numeric
 aantal inwoners per km²;aantal;Numeric
 kWh;aantal;Numeric
 m³;aantal;Numeric
 per huishouden;aantal;Numeric
-km;aantal;Numeric
+km;aantal;Mean
 ha;aantal;Numeric
 Getal;aantal;Numeric
 per 100 000 van gem. bev.;aantal;Numeric

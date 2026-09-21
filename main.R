@@ -4,7 +4,7 @@
 # Problemen en verzoeken kunnen worden ingediend op
 # https://github.com/GGD-Limburg-Noord/CBS2Swing
 #
-# Versie: 11 september 2026
+# Versie: 21 september 2026
 #
 
 
@@ -105,6 +105,7 @@ get_gemeentes_GGD <- function(
     geoitemcode_NL  = "1",
     geolevelcode_PV = "provincie",
     geoitemcode_PV  = NULL,
+    #geoitemcode_PV  = 12,      # Voorbeeld voor Limburg bij GGD Limburg-Noord
     geolevelcode_GM = "gemeente") {
   
   key <- paste(GGD_naam, jaar, sep = "_")
@@ -157,7 +158,7 @@ get_gemeentes_GGD <- function(
   
   # Provincie geoitemcode kan worden overschreven als ie niet nul is (bijv. geoitemcode_PV = "12")
   if (!is.null(geoitemcode_PV)) {
-    provincies$geoitemcode <- geoitemcode_PV
+    provincies$geoitemcode <- as.character(geoitemcode_PV)
   }
   
   provincies <- provincies %>%
@@ -397,9 +398,13 @@ for (CBS_tabel in 1:nrow(CBS_tabellen)){
       ) %>%
       mutate(
         BESCHRIJVING = WijkenEnBuurten_label,
-        geoitemcode  = as.character(as.integer(str_remove(WijkenEnBuurten, "^[A-Z]+"))),
+        geoitemcode  = case_when(
+          soort == "WK" ~ str_pad(str_remove(WijkenEnBuurten, "^[A-Z]+"),
+                                  width = 6, side = "left", pad = "0"),
+          TRUE          ~ as.character(as.integer(str_remove(WijkenEnBuurten, "^[A-Z]+")))
+        ),
         geolevelcode = case_when(
-          soort == "WK" ~ "wijk",
+          soort == "WK" ~ paste0("wijk", str_sub(as.character(jaar), -2)),
           soort == "GM" ~ "gemeente",
           TRUE ~ "nederland"
         )
@@ -479,7 +484,7 @@ for (CBS_tabel in 1:nrow(CBS_tabellen)){
 data = bind_rows(data_list) %>%
   select(-dimcat_kolomnaam, -dimcat_bewaren, -dimcat_kolomnaam_CategoryGroup, -CategoryGroupID_bewaren)
 metadata = bind_rows(metadata_list) %>%
-  mutate(formula = NA)
+  mutate(formula = "")
 
 # Toevoegen berekende indicatoren aan metadata
 formula <- readxl::read_excel('data/openbaar/input.xlsx', sheet = 'Formula') %>%
